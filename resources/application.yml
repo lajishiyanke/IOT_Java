@@ -1,0 +1,161 @@
+server:
+  address: 0.0.0.0  # 允许所有地址访问
+  port: 8080
+
+spring:
+  # 数据库配置
+  datasource:
+    url: 
+    username: xxxx
+    password: xxxxx
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  mvc:
+    pathmatch:
+      matching-strategy: path_pattern_parser
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - file:/path/to/your/images/
+      
+  # Redis配置
+  data:
+    redis:
+      url: 
+      database: 0
+      connect-timeout: 5000
+      client-type: lettuce
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  # Redisson配置优化
+  redis:
+    redisson:
+      config: |
+        singleServerConfig:
+          address: "${spring.data.redis.url}"  # 复用已有的Redis URL
+          database: ${spring.data.redis.database}
+          connectTimeout: ${spring.data.redis.connect-timeout}
+
+  # 邮件配置
+  mail:
+    host: 
+    port: 
+    username: 
+    password: 
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  # Flyway配置
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    create-schemas: true
+    schemas: test-db
+    clean-disabled: false
+    validate-on-migrate: false
+
+# JWT配置
+jwt:
+  secret: 
+  expiration: 86400000 # 24小时
+
+# MyBatis Plus配置
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.iot.platform.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# MQTT配置
+mqtt:
+  enabled: false
+  broker: tcp://localhost:1883
+  client-id: iot-platform
+  username: mqtt-user
+  password: mqtt-password
+
+# RocketMQ配置
+rocketmq:
+  enabled: false
+  name-server: 127.0.0.1:9876
+  producer:
+    group: sensor-data-producer  # Add this producer group configuration
+  consumer:
+    group: sensor-data-consumer
+    topic: sensor-data
+  
+# 阿里云短信配置
+aliyun:
+  sms:
+    access-key-id: your-access-key-id
+    access-key-secret: your-access-key-secret
+    sign-name: your-sign-name
+    template-code: your-template-code 
+
+# 批处理配置
+batch:
+  processing:
+    size: 1000    # 批处理大小
+    interval: 5000 # 批处理间隔（毫秒）
+
+# Python配置
+python:
+  # 指定虚拟环境中的 Python 解释器路径
+  executable: /home/devbox/project/venv/bin/python3
+  scripts-path: scripts/python
+
+# 外部处理器配置
+external:
+  matlab:
+    home: ${matlab.home}
+    scripts-path: ${matlab.scripts-path}
+  python:
+    executable: ${python.executable}
+    scripts-path: ${python.scripts-path}
+
+export:
+  file:
+    path: /home/devbox/project/export
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui/index.html
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.springdoc: DEBUG
+    com.iot.platform: DEBUG
+
+amqp:
+  accessKey: 
+  accessSecret: 
+  consumerGroupId:
+  iotInstanceId: 
+  clientId:
+  host: 
+  connectionCount: 
