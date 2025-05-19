@@ -1,0 +1,237 @@
+-- 用户表
+CREATE TABLE `users` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `username` VARCHAR(50) NOT NULL,
+    `password` VARCHAR(255) NOT NULL,
+    `email` VARCHAR(100) NOT NULL,
+    `phone` VARCHAR(20),
+    `role_type` VARCHAR(20) NOT NULL DEFAULT 'USER',
+    `is_enabled` BOOLEAN NOT NULL DEFAULT TRUE,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username` (`username`),
+    UNIQUE KEY `uk_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; 
+
+-- 设备表
+CREATE TABLE devices (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '设备ID',
+    device_code VARCHAR(50) NOT NULL UNIQUE COMMENT '设备编号',
+    device_name VARCHAR(100) NOT NULL COMMENT '设备名称',
+    device_type VARCHAR(50) NOT NULL COMMENT '设备类型',
+    user_id BIGINT NOT NULL COMMENT '所属用户ID',
+    status VARCHAR(20) NOT NULL DEFAULT 'OFFLINE' COMMENT '设备状态：ONLINE/OFFLINE/FAULT',
+    mqtt_topic VARCHAR(200) COMMENT 'MQTT订阅主题',
+    description TEXT NOT NULL COMMENT '设备描述',
+    group_id VARCHAR(50) NOT NULL COMMENT '设备分组ID',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_device_code (device_code),
+    INDEX idx_user_id (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备表';
+
+-- 传感器数据表
+CREATE TABLE sensor_data (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '数据ID',
+    device_id BIGINT NOT NULL COMMENT '设备ID',
+    channel_id VARCHAR(50) NOT NULL COMMENT '通道ID',
+    data_value DOUBLE NOT NULL COMMENT '数据值',
+    data_unit VARCHAR(20) COMMENT '数据单位',
+    data_type VARCHAR(50) NOT NULL COMMENT '数据类型',
+    collect_time DATETIME NOT NULL COMMENT '采集时间',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_device_channel (device_id, channel_id),
+    INDEX idx_collect_time (collect_time),
+    FOREIGN KEY (device_id) REFERENCES devices(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='传感器数据表';
+
+-- 信号文件表
+CREATE TABLE signal_files (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id INT NOT NULL,
+    file_name VARCHAR(100) NOT NULL,
+    sampling_rate DOUBLE NOT NULL,
+    collect_time DATETIME(6) NOT NULL,
+    file_data MEDIUMBLOB NOT NULL,  -- 存储CSV文件内容
+    file_size INT NOT NULL,         -- 文件大小(字节)
+    channel_count INT NOT NULL,     -- 通道数量
+    data_points INT NOT NULL,       -- 数据点数
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_device_time (device_id, collect_time)
+);
+
+-- 异常记录表
+CREATE TABLE IF NOT EXISTS `alarm_records` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    `device_id` INT NOT NULL COMMENT '设备ID',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `channel_id` VARCHAR(50) NOT NULL COMMENT '通道ID',
+    `is_handled` BOOLEAN DEFAULT FALSE COMMENT '是否已处理',
+    `handle_time` DATETIME DEFAULT NULL COMMENT '处理时间',
+    `handle_user_id` BIGINT DEFAULT NULL COMMENT '处理人ID',
+    `handle_note` TEXT DEFAULT NULL COMMENT '处理备注',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    KEY `idx_device_id` (`device_id`),
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_create_time` (`create_time`),
+    KEY `idx_is_handled` (`is_handled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警记录表';
+
+-- 设备分组表
+CREATE TABLE `device_groups` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分组ID',
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '分组名称',
+    `description` TEXT COMMENT '分组描述',
+    `parent_id` BIGINT COMMENT '父分组ID',
+    `level` INT DEFAULT 1 COMMENT '分组层级',
+    `path` VARCHAR(255) DEFAULT '/' COMMENT '分组路径',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_parent_id` (`parent_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备分组表';
+
+-- 设备分组关系表
+CREATE TABLE device_group_relations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '关系ID',
+    device_id BIGINT NOT NULL COMMENT '设备ID',
+    group_id BIGINT NOT NULL COMMENT '分组ID',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_device_group (device_id, group_id),
+    FOREIGN KEY (device_id) REFERENCES devices(id),
+    FOREIGN KEY (group_id) REFERENCES device_groups(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备分组关系表'; 
+
+
+-- 告警规则表
+CREATE TABLE alarm_rules (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '规则ID',
+    device_id BIGINT NOT NULL COMMENT '设备ID',
+    channel_id VARCHAR(50) NOT NULL COMMENT '通道ID',
+    rule_name VARCHAR(100) NOT NULL COMMENT '规则名称',
+    rule_type VARCHAR(50) NOT NULL COMMENT '规则类型：THRESHOLD_UPPER/THRESHOLD_LOWER/THRESHOLD_EQUAL/CUSTOM',
+    threshold_value DOUBLE COMMENT '阈值',
+    alarm_level VARCHAR(20) NOT NULL COMMENT '告警等级：LOW/MEDIUM/HIGH',
+    description TEXT COMMENT '规则描述',
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    notify_types VARCHAR(255) COMMENT '通知方式：EMAIL,SMS,WEBHOOK等',
+    notify_users VARCHAR(255) COMMENT '通知用户ID列表',
+    custom_script TEXT COMMENT '自定义规则脚本',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    
+    INDEX idx_device_channel (device_id, channel_id),
+    INDEX idx_rule_type (rule_type),
+    INDEX idx_alarm_level (alarm_level),
+    FOREIGN KEY (device_id) REFERENCES devices(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警规则表';
+
+-- 告警规则条件表
+CREATE TABLE alarm_rule_conditions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '条件ID',
+    rule_id BIGINT NOT NULL COMMENT '规则ID',
+    condition_type VARCHAR(50) NOT NULL COMMENT '条件类型：AND/OR',
+    field_name VARCHAR(100) NOT NULL COMMENT '字段名',
+    operator VARCHAR(20) NOT NULL COMMENT '操作符：GT/LT/GTE/LTE/EQ/NEQ',
+    field_value VARCHAR(255) NOT NULL COMMENT '字段值',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    
+    INDEX idx_rule_id (rule_id),
+    FOREIGN KEY (rule_id) REFERENCES alarm_rules(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警规则条件表';
+
+-- 告警规则动作表
+CREATE TABLE alarm_rule_actions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '动作ID',
+    rule_id BIGINT NOT NULL COMMENT '规则ID',
+    action_type VARCHAR(50) NOT NULL COMMENT '动作类型：EMAIL/SMS/WEBHOOK/SCRIPT',
+    action_config JSON NOT NULL COMMENT '动作配置',
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    
+    INDEX idx_rule_id (rule_id),
+    FOREIGN KEY (rule_id) REFERENCES alarm_rules(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警规则动作表'; 
+
+-- 系统配置表
+CREATE TABLE system_configs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '配置ID',
+    config_key VARCHAR(100) NOT NULL COMMENT '配置键',
+    config_value TEXT COMMENT '配置值',
+    value_type VARCHAR(20) NOT NULL COMMENT '值类型：STRING/NUMBER/BOOLEAN/JSON',
+    description TEXT COMMENT '配置描述',
+    is_system BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否系统配置',
+    is_encrypted BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否加密存储',
+    is_editable BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否可编辑',
+    group_name VARCHAR(50) NOT NULL COMMENT '配置分组',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT '排序序号',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    
+    UNIQUE KEY uk_config_key (config_key),
+    INDEX idx_group_name (group_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
+
+-- 配置修改历史表
+CREATE TABLE config_change_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '日志ID',
+    config_id BIGINT NOT NULL COMMENT '配置ID',
+    old_value TEXT COMMENT '原值',
+    new_value TEXT COMMENT '新值',
+    change_user_id BIGINT NOT NULL COMMENT '修改人ID',
+    change_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '修改时间',
+    change_reason TEXT COMMENT '修改原因',
+    
+    INDEX idx_config_id (config_id),
+    INDEX idx_change_user_id (change_user_id),
+    FOREIGN KEY (config_id) REFERENCES system_configs(id),
+    FOREIGN KEY (change_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配置修改历史表';
+
+-- 验证码表
+CREATE TABLE t_verification_code (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    email VARCHAR(100) NOT NULL COMMENT '邮箱地址',
+    code VARCHAR(10) NOT NULL COMMENT '验证码',
+    type VARCHAR(20) NOT NULL COMMENT '验证码类型：REGISTER/RESET_PASSWORD',
+    expired_time DATETIME NOT NULL COMMENT '过期时间',
+    is_used TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已使用：0-未使用，1-已使用',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_email_type (email, type),
+    INDEX idx_expired_time (expired_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='验证码表'; 
+
+-- 插入一些基础配置
+INSERT INTO system_configs 
+(config_key, config_value, value_type, description, is_system, group_name, sort_order)
+VALUES
+-- 系统基础配置
+('system.name', 'IoT Platform', 'STRING', '系统名称', TRUE, 'SYSTEM', 100),
+('system.version', '1.0.0', 'STRING', '系统版本', TRUE, 'SYSTEM', 101),
+('system.admin.email', 'admin@example.com', 'STRING', '系统管理员邮箱', TRUE, 'SYSTEM', 102),
+
+-- 数据采集配置
+('data.batch.size', '1000', 'NUMBER', '数据批处理大小', TRUE, 'DATA', 200),
+('data.batch.interval', '5000', 'NUMBER', '数据批处理间隔(ms)', TRUE, 'DATA', 201),
+('data.retention.days', '90', 'NUMBER', '数据保留天数', TRUE, 'DATA', 202),
+
+-- 告警配置
+('alarm.notification.interval', '300', 'NUMBER', '告警通知最小间隔(s)', TRUE, 'ALARM', 300),
+('alarm.auto.recovery', 'true', 'BOOLEAN', '是否自动恢复告警', TRUE, 'ALARM', 301),
+('alarm.max.retry', '3', 'NUMBER', '告警通知最大重试次数', TRUE, 'ALARM', 302),
+
+-- 安全配置
+('security.password.min.length', '6', 'NUMBER', '密码最小长度', TRUE, 'SECURITY', 400),
+('security.password.complexity', 'true', 'BOOLEAN', '是否启用密码复杂度检查', TRUE, 'SECURITY', 401),
+('security.session.timeout', '3600', 'NUMBER', '会话超时时间(s)', TRUE, 'SECURITY', 402),
+
+-- 集成配置
+('integration.mqtt.enabled', 'true', 'BOOLEAN', '是否启用MQTT集成', TRUE, 'INTEGRATION', 500),
+('integration.email.enabled', 'true', 'BOOLEAN', '是否启用邮件集成', TRUE, 'INTEGRATION', 501),
+('integration.sms.enabled', 'true', 'BOOLEAN', '是否启用短信集成', TRUE, 'INTEGRATION', 502); 
